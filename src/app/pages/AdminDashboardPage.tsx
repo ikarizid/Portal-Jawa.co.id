@@ -27,7 +27,9 @@ export function AdminDashboardPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingArticle, setEditingArticle] = useState<Article | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
   const [adminEmail, setAdminEmail] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -88,6 +90,38 @@ export function AdminDashboardPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setIsUploading(true);
+    
+    let finalImageUrl = formData.image;
+    
+    if (imageFile) {
+      const fileExt = imageFile.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('images')
+        .upload(fileName, imageFile);
+
+      if (uploadError) {
+        alert("Gagal mengunggah foto: " + uploadError.message);
+        setIsLoading(false);
+        setIsUploading(false);
+        return;
+      }
+      
+      const { data: publicUrlData } = supabase.storage
+        .from('images')
+        .getPublicUrl(fileName);
+        
+      finalImageUrl = publicUrlData.publicUrl;
+    }
+
+    if (!finalImageUrl) {
+       alert("Harap unggah gambar atau masukkan URL gambar yang valid.");
+       setIsLoading(false);
+       setIsUploading(false);
+       return;
+    }
     
     if (editingArticle) {
       // Update existing article
@@ -100,7 +134,7 @@ export function AdminDashboardPage() {
           author: formData.author,
           status: formData.status,
           content: formData.content,
-          image: formData.image,
+          image: finalImageUrl,
         })
         .eq("id", editingArticle.id)
         .select();
@@ -123,7 +157,7 @@ export function AdminDashboardPage() {
           authorAvatar: "https://i.pravatar.cc/150?img=20",
           status: formData.status,
           content: formData.content,
-          image: formData.image,
+          image: finalImageUrl,
           date: new Date().toISOString()
         }])
         .select();
@@ -144,8 +178,10 @@ export function AdminDashboardPage() {
       content: "",
       image: "",
     });
+    setImageFile(null);
     setShowAddForm(false);
     setIsLoading(false);
+    setIsUploading(false);
   };
 
   const handleEdit = (article: Article) => {
@@ -176,6 +212,7 @@ export function AdminDashboardPage() {
   const handleCancelForm = () => {
     setShowAddForm(false);
     setEditingArticle(null);
+    setImageFile(null);
     setFormData({
       title: "",
       excerpt: "",
@@ -290,6 +327,20 @@ export function AdminDashboardPage() {
                   </div>
                   <div className="text-4xl text-orange-600" style={{ fontFamily: 'Merriweather, serif' }}>
                     {stats.draft}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Alert File Upload Info */}
+              <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-8">
+                <div className="flex">
+                  <div className="ml-3">
+                    <p className="text-sm text-blue-700 font-bold mb-1" style={{ fontFamily: 'Inter, sans-serif' }}>
+                      Pembaruan Fitur: Upload Gambar Lokal
+                    </p>
+                    <p className="text-sm text-blue-600" style={{ fontFamily: 'Inter, sans-serif' }}>
+                      Sekarang Anda dapat mengunggah gambar langsung dari komputer/HP saat menambah berita.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -514,21 +565,55 @@ export function AdminDashboardPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm mb-2" style={{ fontFamily: 'Inter, sans-serif' }}>
-                    URL Gambar
+                  <label className="block text-sm mb-2 font-bold" style={{ fontFamily: 'Inter, sans-serif' }}>
+                    Gambar Utama
                   </label>
-                  <input
-                    type="url"
-                    value={formData.image}
-                    onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                    required
-                    placeholder="https://example.com/image.jpg"
-                    className="w-full px-4 py-2 border rounded outline-none focus:border-[#C00000]"
-                    style={{ fontFamily: 'Inter, sans-serif' }}
-                  />
-                  {formData.image && (
+                  
+                  <div className="p-4 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setImageFile(file);
+                          setFormData({ ...formData, image: "" });
+                        }
+                      }}
+                      className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-[#C00000] file:text-white hover:file:bg-[#A00000]"
+                      style={{ fontFamily: 'Inter, sans-serif' }}
+                    />
+                    
+                    <div className="text-center my-3 relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-gray-300"></div>
+                      </div>
+                      <div className="relative flex justify-center">
+                        <span className="px-2 bg-gray-50 text-xs text-gray-500">ATAU MASUKKAN URL</span>
+                      </div>
+                    </div>
+
+                    <input
+                      type="url"
+                      value={formData.image}
+                      onChange={(e) => {
+                        setFormData({ ...formData, image: e.target.value });
+                        setImageFile(null);
+                      }}
+                      placeholder="https://example.com/image.jpg"
+                      className="w-full px-4 py-2 border rounded outline-none focus:border-[#C00000] bg-white"
+                      style={{ fontFamily: 'Inter, sans-serif' }}
+                    />
+                  </div>
+
+                  {(formData.image || imageFile) && (
                     <div className="mt-3">
-                      <img src={formData.image} alt="Preview" className="w-full h-48 object-cover rounded" />
+                      <p className="text-xs text-gray-500 mb-1">Preview Gambar:</p>
+                      <img 
+                        src={imageFile ? URL.createObjectURL(imageFile) : formData.image} 
+                        alt="Preview" 
+                        className="w-full h-48 object-cover rounded shadow border" 
+                      />
                     </div>
                   )}
                 </div>
@@ -550,14 +635,16 @@ export function AdminDashboardPage() {
                 <div className="flex gap-4">
                   <button
                     type="submit"
-                    className="flex-1 bg-[#C00000] text-white py-3 rounded hover:bg-[#A00000] transition-colors"
+                    disabled={isUploading}
+                    className="flex-1 bg-[#C00000] text-white py-3 rounded hover:bg-[#A00000] transition-colors disabled:opacity-50"
                     style={{ fontFamily: 'Inter, sans-serif' }}
                   >
-                    {editingArticle ? "Update Berita" : "Publish Berita"}
+                    {isUploading ? "Mengunggah..." : editingArticle ? "Update Berita" : "Publish Berita"}
                   </button>
                   <button
                     type="button"
                     onClick={handleCancelForm}
+                    disabled={isUploading}
                     className="px-6 border border-gray-300 rounded hover:bg-gray-50 transition-colors"
                     style={{ fontFamily: 'Inter, sans-serif' }}
                   >
